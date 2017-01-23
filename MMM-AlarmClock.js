@@ -9,6 +9,7 @@ Module.register("MMM-AlarmClock", {
 
     next: null,
     alarmFired: false,
+    audio: null,
 
     defaults: {
         sound: 'alarm.mp3',
@@ -42,32 +43,63 @@ Module.register("MMM-AlarmClock", {
         moment.locale(config.language);
     },
 
+    startAlarm: function() {
+        var self = this;
+        
+        var alert = {
+            imageFA: 'bell-o',
+            title: this.next.sender || this.next.title,
+            message: this.next.message
+        };
+        if(!this.config.touch){
+            alert.timer = this.config.timer;
+        }
+        self.sendNotification("SHOW_ALERT", alert);
+        self.alarmFired = true;
+        self.updateDom(300);
+        self.timer = setTimeout(() => {
+            self.resetAlarmClock();
+        }, self.config.timer);
+        if(self.config.touch){
+            MM.getModules().enumerate((module) => {
+                if(module.name === "alert"){
+                    module.alerts["MMM-AlarmClock"].ntf.addEventListener("click", () => {
+                        clearTimeout(this.timer);
+                        self.resetAlarmClock();
+                    });
+                }
+            });
+        }
+    },
+
     checkAlarm: function(){
         if(!this.alarmFired && this.next && moment().diff(this.next.moment) >= 0){
-            var alert = {
-                imageFA: 'bell-o',
-                title: this.next.sender || this.next.title,
-                message: this.next.message
-            };
-            if(!this.config.touch){
-                alert.timer = this.config.timer;
-            }
-            this.sendNotification("SHOW_ALERT", alert);
-            this.alarmFired = true;
-            this.updateDom(300);
-            this.timer = setTimeout(() => {
-                this.resetAlarmClock();
-            }, this.config.timer);
-            if(this.config.touch){
-                MM.getModules().enumerate((module) => {
-                    if(module.name === "alert"){
-                        module.alerts["MMM-AlarmClock"].ntf.addEventListener("click", () => {
-                            clearTimeout(this.timer);
-                            this.resetAlarmClock();
-                        });
-                    }
-                });
-            }
+            this.startAlarm();
+
+            // var alert = {
+            //     imageFA: 'bell-o',
+            //     title: this.next.sender || this.next.title,
+            //     message: this.next.message
+            // };
+            // if(!this.config.touch){
+            //     alert.timer = this.config.timer;
+            // }
+            // this.sendNotification("SHOW_ALERT", alert);
+            // this.alarmFired = true;
+            // this.updateDom(300);
+            // this.timer = setTimeout(() => {
+            //     this.resetAlarmClock();
+            // }, this.config.timer);
+            // if(this.config.touch){
+            //     MM.getModules().enumerate((module) => {
+            //         if(module.name === "alert"){
+            //             module.alerts["MMM-AlarmClock"].ntf.addEventListener("click", () => {
+            //                 clearTimeout(this.timer);
+            //                 this.resetAlarmClock();
+            //             });
+            //         }
+            //     });
+            // }
         }
     },
 
@@ -83,6 +115,13 @@ Module.register("MMM-AlarmClock", {
     },
 
     resetAlarmClock: function(){
+        // Stop the alarm
+        if (this.audio) {
+console.log("Stopping audio");            
+            this.audio.pause();
+            this.audio.currentTime = 0;
+        }
+
         this.alarmFired = false;
         if(this.config.touch){
             this.sendNotification("HIDE_ALERT");
@@ -141,6 +180,10 @@ Module.register("MMM-AlarmClock", {
             wrapper.appendChild(text);
         } else if(this.alarmFired) {
             var sound = document.createElement("audio");
+
+            // cwp : save reference to audio so we can kill it later
+            this.audio = sound;
+
             if (this.config.sound.match(/^https?:\/\//)) {
                 sound.src = this.config.sound;
             }else{
@@ -158,5 +201,11 @@ Module.register("MMM-AlarmClock", {
         }
 
         return wrapper;
+    },
+
+    notificationReceived: function(notification, event, sender) {
+        if (notification === 'SHOW_ALARM') {
+            this.startAlarm();
+        }
     }
 });
